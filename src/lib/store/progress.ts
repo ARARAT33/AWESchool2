@@ -1,428 +1,306 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { create } from "zustand";
 
-interface ProgressState {
-  completedLessons: Record<string, number> // lessonId -> best score (%)
-  currentLesson: Record<string, string> // subjectId -> next lesson id
-  totalPoints: number
-  achievements: string[]
-  streak: number
-  lastActiveDate: string
-  userName: string
-  avatar?: string
-  favoriteLessons: string[]
-  bookmarks: string[]
-  hintsUsed: Record<string, number>
-  timeSpent: Record<string, number>
-  lastVisitedSubject?: string
-  totalStudyTime: number
-  fontSize: 'small' | 'medium' | 'large'
-  theme: 'light' | 'dark' | 'auto'
-  userId: string // մշտական օգտատիրոջ ID
-  shareCode: string // կարճ կոդ կիսման համար
-  createdAt: string // առաջին անգամ գրանցման ամսաթիվ
-  dailyGoal: number // օրական նպատակ (դասերի քանակ)
-  dailyProgress: number // այսօրվա առաջընթաց
-  lastGoalDate: string // վերջին անգամ նպատակը թարմացվել է
-  recentlyViewed: string[] // վերջերս դիտված դասեր
-  language: string // ընթացիկ լեզու
-  learningMode: 'school' | 'university' // ուսումնական ռեժիմ
-  setUserName: (name: string) => void
-  setAvatar: (avatar: string) => void
-  setUserId: (id: string) => void
-  setShareCode: (code: string) => void
-  setDailyGoal: (goal: number) => void
-  addRecentlyViewed: (lessonId: string) => void
-  resetDailyProgress: () => void
-  setLanguage: (lang: string) => void
-  setLearningMode: (mode: 'school' | 'university') => void
-  completeLesson: (subjectId: string, lessonId: string, score: number, nextLessonId?: string) => void
-  isLessonUnlocked: (subjectId: string, lessonId: string, order: number) => boolean
-  getLessonScore: (lessonId: string) => number | null
-  getSubjectProgress: (subjectId: string, totalLessons: number) => number
-  addAchievement: (achievement: string) => void
-  resetProgress: () => void
-  toggleFavorite: (lessonId: string) => void
-  isFavorite: (lessonId: string) => boolean
-  toggleBookmark: (lessonId: string) => void
-  isBookmarked: (lessonId: string) => boolean
-  useHint: (lessonId: string) => void
-  getHintsUsed: (lessonId: string) => number
-  addStudyTime: (lessonId: string, minutes: number) => void
-  setLastVisitedSubject: (subjectId: string) => void
-  setFontSize: (size: 'small' | 'medium' | 'large') => void
-  setTheme: (theme: 'light' | 'dark' | 'auto') => void
-  exportData: () => string
-  importData: (data: string) => boolean
+export interface Achievement {
+  id: string;
+  title: string;
+  desc: string;
+  icon: string;
+  unlocked: boolean;
 }
 
-export const ACHIEVEMENTS = {
-  FIRST_LESSON: 'Առաջին դասը ավարտված 🌟',
-  FIVE_LESSONS: '5 դաս ավարտված ⭐',
-  TEN_LESSONS: '10 դաս ավարտված 🏆',
-  PERFECT_SCORE: 'Կատարյալ արդյունք (100%) 💯',
-  FIFTY_LESSONS: '50 դաս ավարտված 🎓',
-  HUNDRED_LESSONS: '100 դաս ավարտված 👑',
-  STREAK_7: '7 օր անընդմեջ 🔥',
-  STREAK_30: '30 օր անընդմեջ 💎',
-  EXPLORER: 'Բոլոր ոլորտներն ուսումնասիրված 🗺️',
-  NO_HINTS: '10 դաս առանց հուշումի 🧠',
+export interface ProgressState {
+  userName: string;
+  userAvatar: string;
+  points: number;
+  level: number;
+  completedCount: number;
+  completedLessons: string[]; // lessonIds
+  lessonScores: Record<string, number>; // lessonId -> score
+  studySeconds: number;
+  dailyGoal: number; // number of lessons to complete per day
+  streak: number;
+  lastStudyDate: string | null; // YYYY-MM-DD
+  favorites: string[]; // subjectIds
+  bookmarks: string[]; // lessonIds
+  achievements: Achievement[];
+  
+  // Actions
+  setNameAndAvatar: (name: string, avatar: string) => void;
+  completeLesson: (lessonId: string, score: number) => void;
+  toggleFavorite: (subjectId: string) => void;
+  toggleBookmark: (lessonId: string) => void;
+  addStudySeconds: (seconds: number) => void;
+  resetProgress: () => void;
+  importProgress: (jsonData: string) => { success: boolean; error?: string };
+  exportProgress: () => string;
 }
 
-export const useProgressStore = create<ProgressState>()(
-  persist(
-    (set, get) => ({
-      completedLessons: {},
-      currentLesson: {},
-      totalPoints: 0,
-      achievements: [],
-      streak: 0,
-      lastActiveDate: '',
-      userName: '',
-      avatar: '',
-      favoriteLessons: [],
-      bookmarks: [],
-      hintsUsed: {},
-      timeSpent: {},
-      lastVisitedSubject: undefined,
-      totalStudyTime: 0,
-      fontSize: 'medium',
-      theme: 'auto',
-      userId: '',
-      shareCode: '',
-      createdAt: '',
-      dailyGoal: 3,
-      dailyProgress: 0,
-      lastGoalDate: '',
-      recentlyViewed: [],
-      language: 'en', // Default language is English
-      learningMode: 'school',
+const DEFAULT_ACHIEVEMENTS: Achievement[] = [
+  { id: "first", title: "Առաջին Քայլ", desc: "Ավարտիր քո առաջին դասը", icon: "🚀", unlocked: false },
+  { id: "perfect", title: "Կատարյալ Գնահատական", desc: "Հանձնիր քննությունը 100% ճիշտ պատասխաններով", icon: "💯", unlocked: false },
+  { id: "seeker", title: "Գիտելիքի Որոնող", desc: "Ավարտիր 5 դաս", icon: "📚", unlocked: false },
+  { id: "expert", title: "Փորձագետ", desc: "Հասիր 1000 միավորի", icon: "🧠", unlocked: false },
+  { id: "streak3", title: "Անկոտրում Կամք", desc: "Պահպանիր 3 օրվա ուսումնական շարք", icon: "🔥", unlocked: false }
+];
 
-      setUserName: (name) => set({ userName: name }),
-      setAvatar: (avatar) => set({ avatar }),
-      setUserId: (id) => set({ userId: id }),
-      setShareCode: (code) => set({ shareCode: code }),
-      setDailyGoal: (goal) => set({ dailyGoal: goal }),
-      addRecentlyViewed: (lessonId) => set((state) => ({
-        recentlyViewed: [lessonId, ...state.recentlyViewed.filter(id => id !== lessonId)].slice(0, 10),
-      })),
-      resetDailyProgress: () => {
-        const today = new Date().toDateString()
-        const state = useProgressStore.getState()
-        if (state.lastGoalDate !== today) {
-          set({ dailyProgress: 0, lastGoalDate: today })
-        }
-      },
-      setLanguage: (lang) => set({ language: lang }),
-      setLearningMode: (mode) => set({ learningMode: mode }),
+const SECURITY_SALT = "AWESchool_Secure_Integrity_Salt_2026_Key#99";
 
-      completeLesson: (subjectId, lessonId, score, nextLessonId) => {
-        const state = get()
-        const previousScore = state.completedLessons[lessonId] || 0
-        const newScore = Math.max(previousScore, score)
-        const pointsEarned = Math.max(0, score - previousScore)
+/**
+ * Simple hash function to generate a secure integrity signature for exported data.
+ */
+function calculateSignature(data: any): string {
+  const content = JSON.stringify({
+    userName: data.userName,
+    points: data.points,
+    level: data.level,
+    completedLessons: data.completedLessons,
+    lessonScores: data.lessonScores,
+    studySeconds: data.studySeconds,
+    streak: data.streak
+  });
+  
+  let hash = 0;
+  const saltedContent = content + SECURITY_SALT;
+  for (let i = 0; i < saltedContent.length; i++) {
+    const char = saltedContent.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return btoa(hash.toString());
+}
 
-        const newAchievements = [...state.achievements]
-        const completedCount = Object.keys({
-          ...state.completedLessons,
-          [lessonId]: newScore,
-        }).length
-
-        if (completedCount >= 1 && !newAchievements.includes(ACHIEVEMENTS.FIRST_LESSON)) {
-          newAchievements.push(ACHIEVEMENTS.FIRST_LESSON)
-        }
-        if (completedCount >= 5 && !newAchievements.includes(ACHIEVEMENTS.FIVE_LESSONS)) {
-          newAchievements.push(ACHIEVEMENTS.FIVE_LESSONS)
-        }
-        if (completedCount >= 10 && !newAchievements.includes(ACHIEVEMENTS.TEN_LESSONS)) {
-          newAchievements.push(ACHIEVEMENTS.TEN_LESSONS)
-        }
-        if (completedCount >= 50 && !newAchievements.includes(ACHIEVEMENTS.FIFTY_LESSONS)) {
-          newAchievements.push(ACHIEVEMENTS.FIFTY_LESSONS)
-        }
-        if (completedCount >= 100 && !newAchievements.includes(ACHIEVEMENTS.HUNDRED_LESSONS)) {
-          newAchievements.push(ACHIEVEMENTS.HUNDRED_LESSONS)
-        }
-        if (score === 100 && !newAchievements.includes(ACHIEVEMENTS.PERFECT_SCORE)) {
-          newAchievements.push(ACHIEVEMENTS.PERFECT_SCORE)
-        }
-
-        const today = new Date().toDateString()
-        const yesterday = new Date(Date.now() - 86400000).toDateString()
-        let newStreak = state.streak
-        if (state.lastActiveDate === today) {
-          // Արդեն այսօր ակտիվ է եղել
-        } else if (state.lastActiveDate === yesterday) {
-          newStreak = state.streak + 1
-        } else {
-          newStreak = 1
-        }
-
-        if (newStreak >= 7 && !newAchievements.includes(ACHIEVEMENTS.STREAK_7)) {
-          newAchievements.push(ACHIEVEMENTS.STREAK_7)
-        }
-        if (newStreak >= 30 && !newAchievements.includes(ACHIEVEMENTS.STREAK_30)) {
-          newAchievements.push(ACHIEVEMENTS.STREAK_30)
-        }
-
-        // Ստուգել առանց հուշումի անցած դասերը
-        const noHintLessons = Object.keys(state.completedLessons).filter(
-          id => (state.hintsUsed[id] || 0) === 0
-        ).length
-        if (noHintLessons >= 10 && !newAchievements.includes(ACHIEVEMENTS.NO_HINTS)) {
-          newAchievements.push(ACHIEVEMENTS.NO_HINTS)
-        }
-
-        // Թարմացնել օրական առաջընթացը
-        const today2 = new Date().toDateString()
-        const newDailyProgress = state.lastGoalDate === today2
-          ? state.dailyProgress + 1
-          : 1
-
-        set({
-          completedLessons: { ...state.completedLessons, [lessonId]: newScore },
-          currentLesson: nextLessonId
-            ? { ...state.currentLesson, [subjectId]: nextLessonId }
-            : state.currentLesson,
-          totalPoints: state.totalPoints + pointsEarned,
-          achievements: newAchievements,
-          streak: newStreak,
-          lastActiveDate: today,
-          dailyProgress: newDailyProgress,
-          lastGoalDate: today2,
-          recentlyViewed: [lessonId, ...state.recentlyViewed.filter(id => id !== lessonId)].slice(0, 10),
-        })
-      },
-
-      isLessonUnlocked: (subjectId, lessonId, order) => {
-        const state = get()
-        if (order === 1) return true
-        const previousLessonId = `${subjectId}-${order - 1}`
-        return state.completedLessons[previousLessonId] !== undefined &&
-               state.completedLessons[previousLessonId] >= 60
-      },
-
-      getLessonScore: (lessonId) => {
-        const state = get()
-        return state.completedLessons[lessonId] ?? null
-      },
-
-      getSubjectProgress: (subjectId, totalLessons) => {
-        const state = get()
-        const completed = Object.keys(state.completedLessons).filter(
-          (id) => id.startsWith(`${subjectId}-`) && state.completedLessons[id] >= 60
-        ).length
-        return Math.round((completed / totalLessons) * 100)
-      },
-
-      addAchievement: (achievement) => {
-        const state = get()
-        if (!state.achievements.includes(achievement)) {
-          set({ achievements: [...state.achievements, achievement] })
-        }
-      },
-
-      toggleFavorite: (lessonId) => {
-        const state = get()
-        const favorites = state.favoriteLessons.includes(lessonId)
-          ? state.favoriteLessons.filter(id => id !== lessonId)
-          : [...state.favoriteLessons, lessonId]
-        set({ favoriteLessons: favorites })
-      },
-
-      isFavorite: (lessonId) => {
-        const state = get()
-        return state.favoriteLessons.includes(lessonId)
-      },
-
-      toggleBookmark: (lessonId) => {
-        const state = get()
-        const bookmarks = state.bookmarks.includes(lessonId)
-          ? state.bookmarks.filter(id => id !== lessonId)
-          : [...state.bookmarks, lessonId]
-        set({ bookmarks })
-      },
-
-      isBookmarked: (lessonId) => {
-        const state = get()
-        return state.bookmarks.includes(lessonId)
-      },
-
-      useHint: (lessonId) => {
-        const state = get()
-        set({
-          hintsUsed: {
-            ...state.hintsUsed,
-            [lessonId]: (state.hintsUsed[lessonId] || 0) + 1,
-          },
-        })
-      },
-
-      getHintsUsed: (lessonId) => {
-        const state = get()
-        return state.hintsUsed[lessonId] || 0
-      },
-
-      addStudyTime: (lessonId, minutes) => {
-        const state = get()
-        set({
-          timeSpent: {
-            ...state.timeSpent,
-            [lessonId]: (state.timeSpent[lessonId] || 0) + minutes,
-          },
-          totalStudyTime: state.totalStudyTime + minutes,
-        })
-      },
-
-      setLastVisitedSubject: (subjectId) => set({ lastVisitedSubject: subjectId }),
-
-      setFontSize: (size) => set({ fontSize: size }),
-
-      setTheme: (theme) => set({ theme }),
-
-      exportData: () => {
-        const state = get()
-        const data = {
-          userId: state.userId,
-          shareCode: state.shareCode,
-          createdAt: state.createdAt,
-          completedLessons: state.completedLessons,
-          currentLesson: state.currentLesson,
-          totalPoints: state.totalPoints,
-          achievements: state.achievements,
-          streak: state.streak,
-          lastActiveDate: state.lastActiveDate,
-          userName: state.userName,
-          avatar: state.avatar,
-          favoriteLessons: state.favoriteLessons,
-          bookmarks: state.bookmarks,
-          hintsUsed: state.hintsUsed,
-          timeSpent: state.timeSpent,
-          totalStudyTime: state.totalStudyTime,
-          fontSize: state.fontSize,
-          theme: state.theme,
-          dailyGoal: state.dailyGoal,
-          dailyProgress: state.dailyProgress,
-          lastGoalDate: state.lastGoalDate,
-          recentlyViewed: state.recentlyViewed,
-          language: state.language,
-          learningMode: state.learningMode,
-          exportedAt: new Date().toISOString(),
-          version: '4.0',
-        }
-        return JSON.stringify(data, null, 2)
-      },
-
-      importData: (dataString) => {
-        try {
-          const data = JSON.parse(dataString)
-          set({
-            userId: data.userId || '',
-            shareCode: data.shareCode || '',
-            createdAt: data.createdAt || new Date().toISOString(),
-            completedLessons: data.completedLessons || {},
-            currentLesson: data.currentLesson || {},
-            totalPoints: data.totalPoints || 0,
-            achievements: data.achievements || [],
-            streak: data.streak || 0,
-            lastActiveDate: data.lastActiveDate || '',
-            userName: data.userName || '',
-            avatar: data.avatar || '',
-            favoriteLessons: data.favoriteLessons || [],
-            bookmarks: data.bookmarks || [],
-            hintsUsed: data.hintsUsed || {},
-            timeSpent: data.timeSpent || {},
-            totalStudyTime: data.totalStudyTime || 0,
-            fontSize: data.fontSize || 'medium',
-            theme: data.theme || 'auto',
-            dailyGoal: data.dailyGoal || 3,
-            dailyProgress: data.dailyProgress || 0,
-            lastGoalDate: data.lastGoalDate || '',
-            recentlyViewed: data.recentlyViewed || [],
-            language: data.language || 'en', // Default to English if not specified
-            learningMode: data.learningMode || 'school',
-          })
-          return true
-        } catch (e) {
-          console.error('Տվյալների ներմուծման սխալ:', e)
-          return false
-        }
-      },
-
-      resetProgress: () => set({
-        completedLessons: {},
-        currentLesson: {},
-        totalPoints: 0,
-        achievements: [],
-        streak: 0,
-        lastActiveDate: '',
-        favoriteLessons: [],
-        bookmarks: [],
-        hintsUsed: {},
-        timeSpent: {},
-        totalStudyTime: 0,
-        lastVisitedSubject: undefined,
-        fontSize: 'medium',
-        theme: 'auto',
-        userId: '',
-        shareCode: '',
-        createdAt: '',
-        dailyGoal: 3,
-        dailyProgress: 0,
-        lastGoalDate: '',
-        recentlyViewed: [],
-        language: 'en', // Default to English
-        learningMode: 'school',
-      }),
-    }),
-    {
-      name: 'edu-game-progress-v3',
-      merge: (persistedState: any, currentState) => ({
-        ...currentState,
-        ...(persistedState as object),
-        // Ensure new fields have defaults
-        language: (persistedState as any)?.language || 'en', // Default to English if not specified
-        learningMode: (persistedState as any)?.learningMode || 'school',
-      }),
-      storage: createJSONStorage(() => {
-        // Ստանդարտ localStorage բոլոր բրաուզերների համար
-        if (typeof window !== 'undefined') {
-          return window.localStorage
-        }
-        return {
-          getItem: () => null,
-          setItem: () => {},
-          removeItem: () => {},
-        }
-      }),
-      // Միայն անհրաժեշտ դաշտերը պահպանել
-      partialize: (state) => ({
-        completedLessons: state.completedLessons,
-        currentLesson: state.currentLesson,
-        totalPoints: state.totalPoints,
-        achievements: state.achievements,
-        streak: state.streak,
-        lastActiveDate: state.lastActiveDate,
-        userName: state.userName,
-        avatar: state.avatar,
-        favoriteLessons: state.favoriteLessons,
-        bookmarks: state.bookmarks,
-        hintsUsed: state.hintsUsed,
-        timeSpent: state.timeSpent,
-        lastVisitedSubject: state.lastVisitedSubject,
-        totalStudyTime: state.totalStudyTime,
-        fontSize: state.fontSize,
-        theme: state.theme,
-        userId: state.userId,
-        shareCode: state.shareCode,
-        createdAt: state.createdAt,
-        dailyGoal: state.dailyGoal,
-        dailyProgress: state.dailyProgress,
-        lastGoalDate: state.lastGoalDate,
-        recentlyViewed: state.recentlyViewed,
-        language: state.language,
-        learningMode: state.learningMode,
-      }),
+export const useProgressStore = create<ProgressState>((set, get) => {
+  // Load initial state safely on client side
+  const loadInitial = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const data = localStorage.getItem("aweschool_progress_v2");
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      return null;
     }
-  )
-)
+  };
+
+  const initial = loadInitial();
+
+  return {
+    userName: initial?.userName || "",
+    userAvatar: initial?.userAvatar || "👨‍🎓",
+    points: initial?.points || 0,
+    level: initial?.level || 1,
+    completedCount: initial?.completedCount || 0,
+    completedLessons: initial?.completedLessons || [],
+    lessonScores: initial?.lessonScores || {},
+    studySeconds: initial?.studySeconds || 0,
+    dailyGoal: initial?.dailyGoal || 3,
+    streak: initial?.streak || 0,
+    lastStudyDate: initial?.lastStudyDate || null,
+    favorites: initial?.favorites || [],
+    bookmarks: initial?.bookmarks || [],
+    achievements: initial?.achievements || DEFAULT_ACHIEVEMENTS,
+
+    setNameAndAvatar: (name, avatar) => {
+      set({ userName: name, userAvatar: avatar });
+      get().addStudySeconds(0); // trigger save
+    },
+
+    completeLesson: (lessonId, score) => {
+      set((state) => {
+        const alreadyCompleted = state.completedLessons.includes(lessonId);
+        const newCompleted = alreadyCompleted
+          ? state.completedLessons
+          : [...state.completedLessons, lessonId];
+
+        // Calculate points
+        const previousScore = state.lessonScores[lessonId] || 0;
+        const scoreDifference = Math.max(0, score - previousScore);
+        const addedPoints = scoreDifference * 5 + (alreadyCompleted ? 0 : 50); // 50 pts for first complete, plus score bonus
+        const newPoints = state.points + addedPoints;
+
+        // Calculate level
+        const newLevel = Math.max(1, Math.floor(newPoints / 250) + 1);
+
+        // Update lesson scores
+        const newScores = {
+          ...state.lessonScores,
+          [lessonId]: Math.max(state.lessonScores[lessonId] || 0, score)
+        };
+
+        // Check and unlock Achievements
+        const newAchievements = state.achievements.map((ach) => {
+          if (ach.id === "first" && !ach.unlocked) {
+            return { ...ach, unlocked: true };
+          }
+          if (ach.id === "perfect" && score === 100 && !ach.unlocked) {
+            return { ...ach, unlocked: true };
+          }
+          if (ach.id === "seeker" && newCompleted.length >= 5 && !ach.unlocked) {
+            return { ...ach, unlocked: true };
+          }
+          if (ach.id === "expert" && newPoints >= 1000 && !ach.unlocked) {
+            return { ...ach, unlocked: true };
+          }
+          return ach;
+        });
+
+        // Track streaks
+        const today = new Date().toISOString().split("T")[0];
+        let newStreak = state.streak;
+        if (state.lastStudyDate !== today) {
+          if (state.lastStudyDate) {
+            const lastDate = new Date(state.lastStudyDate);
+            const diffDays = Math.floor((new Date(today).getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+            if (diffDays === 1) {
+              newStreak += 1;
+            } else if (diffDays > 1) {
+              newStreak = 1; // reset streak if a day is missed
+            }
+          } else {
+            newStreak = 1;
+          }
+        }
+
+        const updatedStreakAchievements = newAchievements.map((ach) => {
+          if (ach.id === "streak3" && newStreak >= 3 && !ach.unlocked) {
+            return { ...ach, unlocked: true };
+          }
+          return ach;
+        });
+
+        const nextState = {
+          completedLessons: newCompleted,
+          completedCount: newCompleted.length,
+          points: newPoints,
+          level: newLevel,
+          lessonScores: newScores,
+          achievements: updatedStreakAchievements,
+          streak: newStreak,
+          lastStudyDate: today
+        };
+
+        // Save progress safely
+        if (typeof window !== "undefined") {
+          localStorage.setItem("aweschool_progress_v2", JSON.stringify({ ...state, ...nextState }));
+        }
+
+        return nextState;
+      });
+    },
+
+    toggleFavorite: (subjectId) => {
+      set((state) => {
+        const isFav = state.favorites.includes(subjectId);
+        const nextFavs = isFav
+          ? state.favorites.filter((id) => id !== subjectId)
+          : [...state.favorites, subjectId];
+
+        const nextState = { favorites: nextFavs };
+        if (typeof window !== "undefined") {
+          localStorage.setItem("aweschool_progress_v2", JSON.stringify({ ...state, ...nextState }));
+        }
+        return nextState;
+      });
+    },
+
+    toggleBookmark: (lessonId) => {
+      set((state) => {
+        const isBookmarked = state.bookmarks.includes(lessonId);
+        const nextBookmarks = isBookmarked
+          ? state.bookmarks.filter((id) => id !== lessonId)
+          : [...state.bookmarks, lessonId];
+
+        const nextState = { bookmarks: nextBookmarks };
+        if (typeof window !== "undefined") {
+          localStorage.setItem("aweschool_progress_v2", JSON.stringify({ ...state, ...nextState }));
+        }
+        return nextState;
+      });
+    },
+
+    addStudySeconds: (seconds) => {
+      set((state) => {
+        const nextSeconds = state.studySeconds + seconds;
+        const nextState = { studySeconds: nextSeconds };
+        if (typeof window !== "undefined") {
+          localStorage.setItem("aweschool_progress_v2", JSON.stringify({ ...state, ...nextState }));
+        }
+        return nextState;
+      });
+    },
+
+    resetProgress: () => {
+      const empty = {
+        userName: "",
+        userAvatar: "👨‍🎓",
+        points: 0,
+        level: 1,
+        completedCount: 0,
+        completedLessons: [],
+        lessonScores: {},
+        studySeconds: 0,
+        dailyGoal: 3,
+        streak: 0,
+        lastStudyDate: null,
+        favorites: [],
+        bookmarks: [],
+        achievements: DEFAULT_ACHIEVEMENTS
+      };
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aweschool_progress_v2");
+      }
+      set(empty);
+    },
+
+    exportProgress: () => {
+      const state = get();
+      const exportData = {
+        userName: state.userName,
+        userAvatar: state.userAvatar,
+        points: state.points,
+        level: state.level,
+        completedLessons: state.completedLessons,
+        lessonScores: state.lessonScores,
+        studySeconds: state.studySeconds,
+        dailyGoal: state.dailyGoal,
+        streak: state.streak,
+        lastStudyDate: state.lastStudyDate,
+        favorites: state.favorites,
+        bookmarks: state.bookmarks,
+        achievements: state.achievements,
+        signature: ""
+      };
+      
+      exportData.signature = calculateSignature(exportData);
+      return btoa(unescape(encodeURIComponent(JSON.stringify(exportData))));
+    },
+
+    importProgress: (b64Data) => {
+      try {
+        const decoded = decodeURIComponent(escape(atob(b64Data)));
+        const parsed = JSON.parse(decoded);
+        
+        if (!parsed.signature) {
+          return { success: false, error: "Missing integrity signature" };
+        }
+        
+        const originalSignature = parsed.signature;
+        const checkData = { ...parsed, signature: "" };
+        const computed = calculateSignature(checkData);
+        
+        if (computed !== originalSignature) {
+          return { success: false, error: "Signature verification failed! Data has been tampered with or is corrupted." };
+        }
+        
+        // Save imported state
+        if (typeof window !== "undefined") {
+          localStorage.setItem("aweschool_progress_v2", JSON.stringify(parsed));
+        }
+        
+        set(parsed);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: "Could not parse or decode backup string." };
+      }
+    }
+  };
+});

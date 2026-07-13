@@ -1,165 +1,141 @@
-'use client'
+import { useState } from "react";
+import { useProgressStore } from "@/lib/store/progress";
+import { useTranslation, Translate } from "@/hooks/use-translation";
+import { Download, Upload, Copy, Check, ShieldAlert, ShieldCheck } from "lucide-react";
 
-import { useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
-} from '@/components/ui/dialog'
-import {
-  Download, Upload, FileJson, Check, AlertCircle, FileDown, FileUp, Shield
-} from 'lucide-react'
-import { useProgressStore } from '@/lib/store/progress'
-import { useTranslation } from '@/hooks/use-translation'
-import { createSignedExportData, importSignedData } from '@/lib/data-migration'
-import { toast } from 'sonner'
+export function FileExportImport() {
+  const { exportProgress, importProgress } = useProgressStore();
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const [importCode, setImportCode] = useState("");
+  const [importStatus, setImportStatus] = useState<{ type: "success" | "error" | null; msg: string }>({
+    type: null,
+    msg: ""
+  });
 
-interface FileExportImportProps {
-  variant?: 'buttons' | 'dropdown'
-}
-
-export function FileExportImport({ variant = 'buttons' }: FileExportImportProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [open, setOpen] = useState(false)
-  const { userName, shareCode } = useProgressStore()
-  const { t } = useTranslation()
-
-  const handleExport = () => {
-    const data = createSignedExportData()
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const date = new Date().toISOString().split('T')[0]
-    link.download = `AWESchool-${userName || 'user'}-${shareCode || 'data'}-${date}.json`
-    link.href = url
-    link.click()
-    URL.revokeObjectURL(url)
-    toast.success(t('file.exported'))
-    setOpen(false)
-  }
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string
-        const result = importSignedData(content)
-
-        if (result.success) {
-          toast.success(t('file.imported'))
-          setOpen(false)
-          setTimeout(() => window.location.reload(), 1000)
-        } else {
-          toast.error(result.error || t('file.invalid'))
-        }
-      } catch {
-        toast.error(t('file.read_error'))
-      }
+  const handleCopy = () => {
+    try {
+      const code = exportProgress();
+      navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error(e);
     }
-    reader.readAsText(file)
-    event.target.value = ''
-  }
+  };
 
-  if (variant === 'buttons') {
-    return (
-      <>
-        <div className="flex gap-1 md:gap-2">
-          <Button
-            onClick={handleExport}
-            size="sm"
-            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold"
-          >
-            <FileDown className="w-3 h-3 md:w-4 md:h-4" />
-            <span className="ml-1 text-xs md:text-sm">EXPORT</span>
-          </Button>
-          <Button
-            onClick={handleImportClick}
-            size="sm"
-            variant="outline"
-            className="border-violet-300 hover:bg-violet-50 font-bold"
-          >
-            <FileUp className="w-3 h-3 md:w-4 md:h-4" />
-            <span className="ml-1 text-xs md:text-sm">IMPORT</span>
-          </Button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,application/json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-      </>
-    )
-  }
+  const handleImport = () => {
+    setImportStatus({ type: null, msg: "" });
+    if (!importCode.trim()) return;
+
+    const res = importProgress(importCode.trim());
+    if (res.success) {
+      setImportStatus({
+        type: "success",
+        msg: t("import_success")
+      });
+      setImportCode("");
+    } else {
+      setImportStatus({
+        type: "error",
+        msg: res.error || t("import_error")
+      });
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <FileJson className="w-4 h-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-violet-600" />
-            {t('file.export_title')}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Button onClick={handleExport} className="w-full" size="lg">
-              <Download className="w-5 h-5 mr-2" />
-              {t('export')} — JSON
-            </Button>
-            <p className="text-xs text-gray-500 text-center">
-              {t('file.export_desc')}
-            </p>
-          </div>
-
-          <div className="border-t pt-4 space-y-2">
-            <Button onClick={handleImportClick} variant="outline" className="w-full" size="lg">
-              <Upload className="w-5 h-5 mr-2" />
-              {t('import')} — JSON
-            </Button>
-            <p className="text-xs text-gray-500 text-center">
-              {t('file.import_desc')}
-            </p>
-          </div>
-
-          <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <Shield className="w-4 h-4 text-violet-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-violet-800">
-                {t('file.protected')}
-              </div>
+    <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto py-4">
+      {/* Export Box */}
+      <div id="export-card" className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+              <Download className="w-5 h-5" />
             </div>
+            <h3 className="font-bold text-gray-800 text-base md:text-lg">
+              <Translate text="Արտահանել Տվյալները" />
+            </h3>
           </div>
+          <p className="text-xs text-gray-500 leading-relaxed mb-4">
+            <Translate text="Պատճենեք այս պաշտպանված կոդը ձեր առաջընթացը այլ սարք տեղափոխելու կամ պահեստային պատճեն ստեղծելու համար: Այն պարունակում է թվային ստորագրություն և պաշտպանված է կեղծումներից:" />
+          </p>
+        </div>
 
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-800">
-                {t('file.warning')}
-              </div>
-            </div>
+        <div className="space-y-3">
+          <button
+            onClick={handleCopy}
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 text-xs md:text-sm shadow-sm transition-all active:scale-[0.98]"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 animate-scale-up" />
+                <Translate text="Պատճենված է" />
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                <Translate text="Պատճենել պաշտպանված կոդը" />
+              </>
+            )}
+          </button>
+          <div className="flex items-center justify-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 py-1 rounded-lg">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <Translate text="Թվային ստորագրությունը միացված է և ապահով" />
           </div>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,application/json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-      </DialogContent>
-    </Dialog>
-  )
+      </div>
+
+      {/* Import Box */}
+      <div id="import-card" className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 bg-violet-50 rounded-lg text-violet-600">
+              <Upload className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-gray-800 text-base md:text-lg">
+              <Translate text="Ներմուծել Տվյալները" />
+            </h3>
+          </div>
+          <p className="text-xs text-gray-500 leading-relaxed mb-3">
+            <Translate text="Տեղադրեք նախկինում արտահանված պաշտպանված կոդը ստորև՝ ձեր առաջընթացը վերականգնելու համար:" />
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <textarea
+            value={importCode}
+            onChange={(e) => setImportCode(e.target.value)}
+            placeholder="Տեղադրեք կոդը այստեղ..."
+            className="w-full h-20 p-2.5 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-400 bg-gray-50/50 resize-none font-mono text-gray-600 leading-normal"
+          />
+
+          <button
+            onClick={handleImport}
+            disabled={!importCode.trim()}
+            className="w-full py-2.5 px-4 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-medium rounded-xl flex items-center justify-center gap-2 text-xs md:text-sm shadow-sm transition-all active:scale-[0.98]"
+          >
+            <Upload className="w-4 h-4" />
+            <Translate text="Ներմուծել և Ստուգել" />
+          </button>
+
+          {importStatus.type && (
+            <div
+              className={`p-3 rounded-xl flex items-start gap-2 text-xs leading-snug animate-fade-in ${
+                importStatus.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
+                  : "bg-rose-50 text-rose-800 border border-rose-100"
+              }`}
+            >
+              {importStatus.type === "success" ? (
+                <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+              ) : (
+                <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+              )}
+              <span>{importStatus.msg}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

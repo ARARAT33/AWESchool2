@@ -1,95 +1,80 @@
-'use client'
-
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Globe, Search, Check } from 'lucide-react'
-import { LANGUAGES, getLanguageByCode } from '@/lib/i18n'
-import { useProgressStore } from '@/lib/store/progress'
-import { useTranslation } from '@/hooks/use-translation'
-import { toast } from 'sonner'
-import { motion } from 'framer-motion'
+import { useState, useMemo } from "react";
+import { LANGUAGES } from "@/lib/languages";
+import { useI18nStore } from "@/lib/i18n";
+import { Globe, Search, ChevronDown } from "lucide-react";
 
 export function LanguageSelector() {
-  const { language, setLanguage } = useProgressStore()
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  const { language, setLanguage } = useI18nStore();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const currentLang = getLanguageByCode(language) || LANGUAGES[0]
+  const selected = useMemo(() => {
+    return LANGUAGES.find((l) => l.code === language) || LANGUAGES[0];
+  }, [language]);
 
-  const filteredLanguages = LANGUAGES.filter(l =>
-    l.name.toLowerCase().includes(search.toLowerCase()) ||
-    l.nativeName.toLowerCase().includes(search.toLowerCase()) ||
-    l.code.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const handleSelect = (code: string) => {
-    setLanguage(code)
-    const lang = getLanguageByCode(code)
-    toast.success(`${lang?.nativeName} ${lang?.flag}`)
-    setOpen(false)
-    // No reload needed — the language change propagates through the Zustand
-    // store and all components re-render with the new translations.
-  }
+  const filtered = useMemo(() => {
+    if (!search.trim()) return LANGUAGES;
+    const s = search.toLowerCase();
+    return LANGUAGES.filter(
+      (l) => l.name.toLowerCase().includes(s) || l.code.toLowerCase().includes(s)
+    );
+  }, [search]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1 px-2">
-          <span className="text-lg">{currentLang.flag}</span>
-          <span className="hidden md:inline text-xs font-bold">{currentLang.code.toUpperCase()}</span>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Globe className="w-5 h-5" />
-            {t('lang.select')} ({LANGUAGES.length}+)
-          </DialogTitle>
-        </DialogHeader>
+    <div className="relative z-50">
+      <button
+        onClick={() => setOpen(!open)}
+        id="lang-select-btn"
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-violet-50 text-gray-700 font-medium rounded-xl border border-gray-200 transition-all text-xs md:text-sm shadow-sm"
+      >
+        <Globe className="w-3.5 h-3.5 text-violet-600 animate-spin-slow" />
+        <span>{selected.flag} {selected.name.split(" ")[0]}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
 
-        <Input
-          placeholder={t('lang.search')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="mb-2"
-        />
-
-        <div className="max-h-[50vh] overflow-y-auto space-y-1">
-          {filteredLanguages.map((lang) => (
-            <motion.button
-              key={lang.code + lang.name}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              onClick={() => handleSelect(lang.code)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left ${
-                language === lang.code
-                  ? 'bg-violet-100 border-2 border-violet-400'
-                  : 'hover:bg-gray-100 border-2 border-transparent'
-              }`}
-            >
-              <span className="text-2xl">{lang.flag}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm">{lang.nativeName}</div>
-                <div className="text-xs text-gray-500">{lang.name}</div>
-              </div>
-              {language === lang.code && (
-                <Check className="w-4 h-4 text-violet-600 flex-shrink-0" />
-              )}
-            </motion.button>
-          ))}
-          {filteredLanguages.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              {t('lang.no_results')}
+      {open && (
+        <>
+          <div className="fixed inset-0" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-2 w-64 max-h-80 bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden flex flex-col z-50 animate-fade-in">
+            {/* Search */}
+            <div className="p-2 border-b border-gray-100 flex items-center gap-1.5 bg-gray-50">
+              <Search className="w-4 h-4 text-gray-400 shrink-0 ml-1" />
+              <input
+                type="text"
+                placeholder="Search language..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full text-xs bg-transparent border-0 outline-none focus:ring-0 p-1 text-gray-800"
+              />
             </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
+
+            {/* List */}
+            <div className="overflow-y-auto flex-1 max-h-60 py-1">
+              {filtered.length > 0 ? (
+                filtered.map((l) => (
+                  <button
+                    key={l.code}
+                    id={`lang-opt-${l.code}`}
+                    onClick={() => {
+                      setLanguage(l.code);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs md:text-sm hover:bg-violet-50 transition-colors ${
+                      language === l.code ? "bg-violet-50 text-violet-700 font-semibold" : "text-gray-700"
+                    }`}
+                  >
+                    <span>{l.flag} {l.name}</span>
+                    {language === l.code && <span className="w-1.5 h-1.5 bg-violet-600 rounded-full" />}
+                  </button>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-xs text-gray-400 text-center">No languages found</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
