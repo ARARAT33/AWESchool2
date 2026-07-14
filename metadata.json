@@ -1,0 +1,6 @@
+{
+  "name": "AWESchool",
+  "description": "Interactive educational platform with multi-language dynamic translation, school & university modes, and gamified progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
