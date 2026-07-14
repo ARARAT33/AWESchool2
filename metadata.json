@@ -1,6 +1,8 @@
 {
   "name": "AWESchool",
-  "description": "Interactive educational platform with multi-language dynamic translation, school & university modes, and gamified progress tracking.",
+  "description": "Interactive multilingual school and university learning platform with progress tracking, secure backup/recovery, custom achievements, search, and dynamic translation.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -1,244 +1,233 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { subjects, getSubject, Subject, Lesson } from "@/lib/data/subjects";
+import { Subject, Lesson } from "@/lib/data/subjects";
 import { useProgressStore } from "@/lib/store/progress";
-import { Translate, useTranslation } from "@/hooks/use-translation";
-import { Book, Bookmark, ChevronLeft, ChevronRight, Lock, CheckCircle2, Award, Info, Sparkles } from "lucide-react";
+import { useTranslation, Translate } from "@/hooks/use-translation";
+import { BookOpen, GraduationCap, ArrowLeft, Heart, Lock, CheckCircle2, Bookmark, BookmarkCheck, Play, Award } from "lucide-react";
 
 interface UniversityBookProps {
-  onSelectLesson: (subjectId: string, lessonId: string) => void;
-  onStartExam: (subjectId: string, lessonId: string) => void;
+  subject: Subject;
+  onSelectLesson: (lesson: Lesson) => void;
+  onBack: () => void;
 }
 
-export function UniversityBook({ onSelectLesson, onStartExam }: UniversityBookProps) {
+export function UniversityBook({ subject, onSelectLesson, onBack }: UniversityBookProps) {
   const { t } = useTranslation();
-  const { completedLessons, lessonScores, bookmarks, toggleBookmark } = useProgressStore();
+  const { completedLessons, lessonScores, bookmarks, toggleBookmark, favorites, toggleFavorite } = useProgressStore();
+  const [selectedLessonId, setSelectedLessonId] = useState<string>(subject.lessons[0]?.id || "");
 
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0].id);
-  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
-  const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
+  const isFavorite = favorites.includes(subject.id);
 
-  const activeSubject = useMemo(() => {
-    return getSubject(selectedSubjectId) || subjects[0];
-  }, [selectedSubjectId]);
+  const lessonsWithStatus = useMemo(() => {
+    let previousCompleted = true;
+    return subject.lessons.map((lesson, idx) => {
+      const isCompleted = completedLessons.includes(lesson.id);
+      const isBookmarked = bookmarks.includes(lesson.id);
+      const score = lessonScores[lesson.id] || null;
+      
+      // sequential locking
+      const isLocked = idx > 0 && !previousCompleted;
+      
+      if (!isLocked && isCompleted) {
+        previousCompleted = true;
+      } else {
+        previousCompleted = false;
+      }
+
+      return {
+        ...lesson,
+        isCompleted,
+        isBookmarked,
+        score,
+        isLocked
+      };
+    });
+  }, [subject.lessons, completedLessons, lessonScores, bookmarks]);
 
   const activeLesson = useMemo(() => {
-    if (!selectedLessonId) return null;
-    return activeSubject.lessons.find((l) => l.id === selectedLessonId) || null;
-  }, [activeSubject, selectedLessonId]);
+    return lessonsWithStatus.find((l) => l.id === selectedLessonId) || lessonsWithStatus[0];
+  }, [lessonsWithStatus, selectedLessonId]);
 
-  const handleSubjectChange = (id: string) => {
-    setSelectedSubjectId(id);
-    setSelectedLessonId(null);
-    setCurrentPageIndex(0);
-  };
-
-  const handleLessonSelect = (lesson: Lesson, isUnlocked: boolean) => {
-    if (!isUnlocked) return;
-    setSelectedLessonId(lesson.id);
-    setCurrentPageIndex(0);
-  };
-
-  const handleNextPage = () => {
-    if (!activeLesson) return;
-    if (currentPageIndex < activeLesson.pages.length - 1) {
-      setCurrentPageIndex((prev) => prev + 1);
-    }
-  };
-
-  const handlePrevPage = () => {
-    if (currentPageIndex > 0) {
-      setCurrentPageIndex((prev) => prev - 1);
-    }
-  };
+  const completedCount = useMemo(() => {
+    return lessonsWithStatus.filter((l) => l.isCompleted).length;
+  }, [lessonsWithStatus]);
 
   return (
-    <div className="space-y-6">
-      {/* Dynamic Shelf (Tabs representing book volumes) */}
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
-        {subjects.map((subj) => {
-          const isActive = selectedSubjectId === subj.id;
-          return (
-            <button
-              key={subj.id}
-              onClick={() => handleSubjectChange(subj.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border shrink-0 ${
-                isActive
-                  ? "bg-violet-600 border-violet-600 text-white shadow-md shadow-violet-100 scale-105"
-                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <span className="text-sm">{subj.icon}</span>
-              <Translate text={subj.name} />
-            </button>
-          );
-        })}
+    <div className="max-w-6xl mx-auto px-4 py-4 space-y-6">
+      {/* Mini Academic Nav header */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="text-xs font-bold text-gray-500 hover:text-violet-600 flex items-center gap-1 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <Translate text="Դեպի ամբողջ ցանկը" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-indigo-600 animate-bounce" />
+          <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100/50">
+            <Translate text="Համալսարանական Գիտական Ռեժիմ" />
+          </span>
+        </div>
       </div>
 
-      {/* Physical Opened Book Layout */}
-      <div className="grid gap-6 lg:grid-cols-2 bg-[#FAF6EE] border-4 border-[#8B5A2B] rounded-[32px] shadow-2xl p-6 md:p-8 relative min-h-[540px] overflow-hidden">
-        {/* Binder Ring Overlay (recreates middle binder of book) */}
-        <div className="hidden lg:flex absolute left-1/2 top-0 bottom-0 -translate-x-1/2 flex-col justify-around py-8 pointer-events-none z-10">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="w-4 h-10 bg-gradient-to-r from-gray-400 via-gray-300 to-gray-500 rounded-full shadow-md border-l border-gray-600" />
-          ))}
-        </div>
+      {/* The Textbook Container */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 bg-amber-50/20 rounded-3xl border border-amber-200/50 shadow-2xl overflow-hidden min-h-[580px]">
+        {/* LEFT COLUMN: The Book Spine / Syllabus Index */}
+        <div className="lg:col-span-4 bg-slate-900 text-slate-100 p-6 flex flex-col justify-between border-r border-slate-800">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl select-none">{subject.icon}</span>
+                <button
+                  onClick={() => toggleFavorite(subject.id)}
+                  className={`p-2 rounded-xl transition-colors ${
+                    isFavorite ? "bg-rose-500/20 text-rose-400" : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Heart className={`w-4.5 h-4.5 ${isFavorite ? "fill-rose-400" : ""}`} />
+                </button>
+              </div>
+              <h3 className="font-extrabold text-white text-lg md:text-xl font-serif tracking-tight pt-1">
+                <Translate text={subject.name} />
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                <Translate text={subject.description} />
+              </p>
+            </div>
 
-        {/* LEFT PAGE: Chapters & Navigation */}
-        <div id="book-left-page" className="bg-white rounded-2xl border border-[#EBE3D5] p-5 md:p-6 shadow-sm flex flex-col justify-between space-y-6 relative">
-          {/* Notebook line decoration */}
-          <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-red-100 pointer-events-none" />
+            <div className="w-full bg-slate-800 h-[1px]" />
 
-          <div className="space-y-4 pl-4">
-            <div className="flex items-center gap-2 border-b border-[#F4EFE6] pb-3">
-              <span className="text-xl">{activeSubject.icon}</span>
-              <div>
-                <h3 className="font-mono text-[10px] uppercase tracking-wider text-violet-600 font-bold">
-                  <Translate text="Ակադեմիական Գիրք" />
-                </h3>
-                <h2 className="font-extrabold text-base md:text-lg text-gray-800">
-                  <Translate text={activeSubject.name} />
-                </h2>
+            {/* Syllabus Chapters List */}
+            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                <Translate text="Դասախոսությունների Ծրագիր" />
+              </span>
+              <div className="space-y-1.5">
+                {lessonsWithStatus.map((lesson, idx) => {
+                  const isActive = lesson.id === selectedLessonId;
+                  return (
+                    <button
+                      key={lesson.id}
+                      id={`univ-tab-${lesson.id}`}
+                      disabled={lesson.isLocked}
+                      onClick={() => setSelectedLessonId(lesson.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all text-xs font-medium ${
+                        lesson.isLocked
+                          ? "opacity-40 cursor-not-allowed"
+                          : isActive
+                          ? "bg-indigo-600 text-white shadow-md font-semibold"
+                          : "bg-slate-800/40 hover:bg-slate-800 text-slate-300"
+                      }`}
+                    >
+                      <span className="truncate pr-2">
+                        {idx + 1}. <Translate text={lesson.title} />
+                      </span>
+                      {lesson.isLocked ? (
+                        <Lock className="w-3 h-3 text-slate-500" />
+                      ) : lesson.isCompleted ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-
-            {/* Chapters list (Lessons) */}
-            <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
-              {activeSubject.lessons.map((lesson, idx) => {
-                const isCompleted = completedLessons.includes(lesson.id);
-                const isBookActive = selectedLessonId === lesson.id;
-                
-                // Sequential locks
-                const isUnlocked = idx === 0 || completedLessons.includes(activeSubject.lessons[idx - 1].id);
-                const score = lessonScores[lesson.id] || 0;
-
-                return (
-                  <button
-                    key={lesson.id}
-                    onClick={() => handleLessonSelect(lesson, isUnlocked)}
-                    className={`w-full text-left p-3 rounded-xl border flex items-center justify-between gap-3 transition-all ${
-                      !isUnlocked
-                        ? "opacity-40 bg-gray-50 border-gray-100 cursor-not-allowed"
-                        : isBookActive
-                        ? "bg-violet-50/50 border-violet-200 text-violet-800 ring-2 ring-violet-100/50"
-                        : "bg-white hover:bg-gray-50/50 border-gray-100 text-gray-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xs text-gray-400">
-                        {idx + 1 < 10 ? `0${idx + 1}` : idx + 1}.
-                      </span>
-                      <p className="font-bold text-xs md:text-sm truncate pr-1">
-                        <Translate text={lesson.title} />
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {isCompleted && (
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold">
-                          {score}%
-                        </span>
-                      )}
-                      {!isUnlocked ? (
-                        <Lock className="w-3.5 h-3.5 text-gray-400" />
-                      ) : isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <span className="w-1.5 h-1.5 bg-violet-600 rounded-full" />
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
-          <div className="pl-4 pt-3 border-t border-[#F4EFE6] text-[10px] text-gray-400 flex justify-between">
-            <span>AWESchool Volume • {activeSubject.id.toUpperCase()}</span>
-            <span>{activeSubject.lessons.length} Chapters</span>
+          <div className="pt-6 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-semibold uppercase">
+            <span><Translate text="Ավարտված" /></span>
+            <span className="text-white font-mono">{completedCount} / {subject.lessons.length}</span>
           </div>
         </div>
 
-        {/* RIGHT PAGE: Active Chapter Reading Sheet / Exam Launcher */}
-        <div id="book-right-page" className="bg-white rounded-2xl border border-[#EBE3D5] p-5 md:p-6 shadow-sm flex flex-col justify-between space-y-6 relative">
-          {/* Notebook line decoration */}
-          <div className="absolute right-4 top-0 bottom-0 w-[1px] bg-red-100 pointer-events-none" />
+        {/* RIGHT COLUMN: The Open Journal Pages */}
+        <div className="lg:col-span-8 bg-stone-50 p-6 md:p-10 flex flex-col justify-between relative shadow-inner overflow-hidden">
+          {/* Paper lines overlay */}
+          <div className="absolute inset-0 bg-paper-lines pointer-events-none opacity-[0.06]" />
 
           {activeLesson ? (
-            <div className="flex-1 flex flex-col justify-between h-full pr-4">
+            <div className="space-y-6 relative z-10 flex-1 flex flex-col justify-between animate-fade-in">
               <div className="space-y-4">
-                {/* Header */}
-                <div className="flex justify-between items-start border-b border-[#F4EFE6] pb-3">
-                  <div>
-                    <span className="font-mono text-[9px] font-bold text-violet-500 uppercase">
-                      <Translate text="Ընթացիկ Գլուխ" />
+                {/* Topic Header inside Journal */}
+                <div className="flex items-start justify-between border-b border-stone-200 pb-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block font-serif">
+                      LECTURE ESSENTIALS
                     </span>
-                    <h4 className="font-extrabold text-sm md:text-base text-gray-800 leading-tight">
+                    <h4 className="font-extrabold text-stone-800 text-xl md:text-2xl font-serif">
                       <Translate text={activeLesson.title} />
                     </h4>
                   </div>
-                  <span className="text-xs font-bold font-mono px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">
-                    {currentPageIndex + 1} / {activeLesson.pages.length}
-                  </span>
+
+                  <div className="flex items-center gap-2">
+                    {/* Bookmark */}
+                    <button
+                      onClick={() => toggleBookmark(activeLesson.id)}
+                      className={`p-2 rounded-xl transition-all ${
+                        activeLesson.isBookmarked 
+                          ? "bg-amber-100 text-amber-600" 
+                          : "bg-stone-200/50 text-stone-500 hover:bg-stone-200"
+                      }`}
+                    >
+                      {activeLesson.isBookmarked ? (
+                        <BookmarkCheck className="w-4.5 h-4.5" />
+                      ) : (
+                        <Bookmark className="w-4.5 h-4.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Body Content */}
-                <div className="text-xs md:text-sm text-gray-600 leading-relaxed font-serif pt-1 min-h-[220px]">
-                  <Translate text={activeLesson.pages[currentPageIndex]} />
+                {/* Lecture abstract / body */}
+                <div className="py-4 space-y-4 max-w-2xl font-serif text-stone-700 leading-relaxed text-sm md:text-base border-b border-stone-200/60 pb-6">
+                  <p className="indent-8">
+                    <Translate text="Սույն դասընթացի շրջանակներում մենք համապարփակ կերպով կուսումնասիրենք սահմանված թեման, վերլուծելով դրա հիմնարար օրենքներն ու գործնական նշանակությունը ժամանակակից գիտական աշխարհում:" />
+                  </p>
+                  <p className="indent-8 font-medium italic text-stone-600 bg-stone-100/50 p-4 rounded-2xl border-l-4 border-indigo-500">
+                    💡 <Translate text={activeLesson.pages[0]} />
+                  </p>
+                  <p className="indent-8">
+                    <Translate text="Ավարտելով տեսական բոլոր էջերի ընթերցումը՝ ուսանողը պատրաստ կլինի հանձնելու ամփոփիչ քննությունը՝ ստանալու համապատասխան որակավորում և XP միավորներ:" />
+                  </p>
                 </div>
               </div>
 
-              {/* Navigation and Exam launchers */}
-              <div className="space-y-3 pt-4 border-t border-[#F4EFE6]">
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={handlePrevPage}
-                    disabled={currentPageIndex === 0}
-                    className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50 text-gray-700 transition-all active:scale-95"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  {currentPageIndex === activeLesson.pages.length - 1 ? (
-                    <button
-                      onClick={() => onStartExam(activeSubject.id, activeLesson.id)}
-                      className="py-1.5 px-4 bg-violet-600 hover:bg-violet-700 text-white font-extrabold rounded-xl text-xs shadow-md transition-all active:scale-95 animate-pulse"
-                    >
-                      <Translate text="Անցնել Քննությանը" />
-                    </button>
+              {/* Action and Score metrics */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-6">
+                <div>
+                  {activeLesson.score !== null ? (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-2xl">
+                      <Award className="w-5 h-5 text-emerald-600" />
+                      <div>
+                        <span className="text-[10px] text-emerald-600 block font-semibold uppercase tracking-wider">
+                          <Translate text="Լավագույն Գնահատական" />
+                        </span>
+                        <span className="text-sm font-extrabold text-emerald-800">{activeLesson.score}% <Translate text="Ճիշտ" /></span>
+                      </div>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => onSelectLesson(activeSubject.id, activeLesson.id)}
-                      className="py-1.5 px-3.5 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold rounded-xl text-xs transition-all active:scale-95"
-                    >
-                      <Translate text="Մեծ Էկրան" />
-                    </button>
+                    <div className="text-xs text-stone-400 font-sans">
+                      ⚠️ <Translate text="Այս դասախոսությունը դեռևս ավարտված չէ:" />
+                    </div>
                   )}
-
-                  <button
-                    onClick={handleNextPage}
-                    disabled={currentPageIndex === activeLesson.pages.length - 1}
-                    className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:bg-gray-50 text-gray-700 transition-all active:scale-95"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
                 </div>
+
+                <button
+                  onClick={() => onSelectLesson(activeLesson)}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs md:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 active:scale-[0.98] transition-all"
+                >
+                  <Play className="w-4 h-4 fill-white text-white" />
+                  <Translate text={activeLesson.isCompleted ? "Վերանայել և Կրկնել" : "Սկսել Դասընթացը"} />
+                </button>
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col justify-center items-center text-center p-6 space-y-4 pr-4">
-              <div className="w-16 h-16 rounded-full bg-violet-50 flex items-center justify-center text-2xl text-violet-600">
-                📖
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-extrabold text-gray-800 text-sm md:text-base">
-                  <Translate text="Ընտրեք Գլուխը ձախից" />
-                </h4>
-                <p className="text-[11px] text-gray-400 max-w-xs leading-normal">
-                  <Translate text="Յուրաքանչյուր առարկա պարունակում է ինտերակտիվ գիտելիքների թերթիկներ և վերջում՝ քննություն:" />
-                </p>
-              </div>
+            <div className="flex-1 flex flex-col items-center justify-center text-stone-400 text-sm">
+              <BookOpen className="w-12 h-12 text-stone-300 mb-2" />
+              <Translate text="Ընտրեք դասախոսություն ձախ կողմից" />
             </div>
           )}
         </div>

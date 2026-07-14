@@ -1,224 +1,228 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Lesson, SUBJECT_CATEGORIES, getSubject } from "@/lib/data/subjects";
-import { useProgressStore } from "@/lib/store/progress";
-import { Translate, useTranslation } from "@/hooks/use-translation";
-import { ArrowLeft, ArrowRight, BookOpen, Moon, Sun, Award, Bookmark, CheckCircle, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Lesson } from "@/lib/data/subjects";
+import { useTranslation, Translate } from "@/hooks/use-translation";
+import { 
+  ChevronLeft, ChevronRight, BookOpen, Volume2, VolumeX, Award, HelpCircle, ArrowRight 
+} from "lucide-react";
 
 interface LessonViewProps {
-  subjectId: string;
-  lessonId: string;
+  lesson: Lesson;
   onBack: () => void;
   onStartExam: () => void;
 }
 
-export function LessonView({ subjectId, lessonId, onBack, onStartExam }: LessonViewProps) {
-  const { t } = useTranslation();
-  const { addStudySeconds, bookmarks, toggleBookmark } = useProgressStore();
-  
+export function LessonView({ lesson, onBack, onStartExam }: LessonViewProps) {
+  const { t, language } = useTranslation();
   const [currentPage, setCurrentPage] = useState(0);
-  const [nightMode, setNightMode] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [synth, setSynth] = useState<SpeechSynthesis | null>(null);
 
-  // Retrieve subject and lesson safely
-  const subject = useMemo(() => getSubject(subjectId), [subjectId]);
-  const lesson = useMemo(() => {
-    return subject?.lessons.find((l) => l.id === lessonId);
-  }, [subject, lessonId]);
-
-  const isBookmarked = bookmarks.includes(lessonId);
-
-  // Study timer: update study seconds in global progress store
   useEffect(() => {
-    const timer = setInterval(() => {
-      addStudySeconds(1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [addStudySeconds]);
+    if (typeof window !== "undefined") {
+      setSynth(window.speechSynthesis);
+    }
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
-  if (!subject || !lesson) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Lesson not found.</p>
-        <button onClick={onBack} className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-xl">
-          Go Back
-        </button>
-      </div>
-    );
-  }
+  const handleNextPage = () => {
+    if (currentPage < lesson.pages.length - 1) {
+      setCurrentPage(currentPage + 1);
+      stopReading();
+    }
+  };
 
-  const totalPages = lesson.pages.length;
-  const isLastPage = currentPage === totalPages - 1;
+  const handlePrevPage = () => {
+    if (currentPage > 0) {
+      setCurrentPage(currentPage - 1);
+      stopReading();
+    }
+  };
 
-  // Generate a distinct seed keyword for the image depending on the lesson/topic
-  const imageKeyword = useMemo(() => {
-    const text = lesson.title.toLowerCase();
-    if (text.includes("math") || text.includes("թվեր") || text.includes("մաթեմ")) return "geometry,numbers,math";
-    if (text.includes("geo") || text.includes("աշխարհ") || text.includes("երկր")) return "earth,nature,map";
-    if (text.includes("phys") || text.includes("ֆիզ")) return "atom,quantum,energy";
-    if (text.includes("chem") || text.includes("քիմ")) return "chemistry,molecule,beaker";
-    if (text.includes("bio") || text.includes("կենսաբան")) return "cell,dna,biology";
-    if (text.includes("astron") || text.includes("աստղ")) return "space,galaxy,stars";
-    if (text.includes("prog") || text.includes("ծրագր") || text.includes("python") || text.includes("js")) return "code,developer,algorithm";
-    if (text.includes("web") || text.includes("վեբ")) return "website,design,ui";
-    if (text.includes("ai") || text.includes("բանական")) return "robot,ai,neural";
-    if (text.includes("chess") || text.includes("շախմատ")) return "chess,board,strategy";
-    return "education,learning,science";
-  }, [lesson.title]);
+  const stopReading = () => {
+    if (synth) {
+      synth.cancel();
+      setSpeaking(false);
+    }
+  };
 
-  const progressPercent = Math.round(((currentPage + 1) / totalPages) * 100);
+  const startReading = async () => {
+    if (!synth) return;
+    
+    if (speaking) {
+      stopReading();
+      return;
+    }
+
+    try {
+      // Find the translated text currently rendered
+      const textToRead = lesson.pages[currentPage];
+      
+      // Since it's translated, we should read either in Armenian or let speechSynthesis translate or read translated text.
+      // We can fetch translated text dynamically for speech if target language is supported, otherwise fallback to text itself
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      
+      // Try to match language code for voice
+      const voices = synth.getVoices();
+      const matchedVoice = voices.find(v => v.lang.startsWith(language));
+      if (matchedVoice) {
+        utterance.voice = matchedVoice;
+      }
+      utterance.lang = language;
+
+      utterance.onend = () => {
+        setSpeaking(false);
+      };
+      utterance.onerror = () => {
+        setSpeaking(false);
+      };
+
+      setSpeaking(true);
+      synth.speak(utterance);
+    } catch (e) {
+      console.error(e);
+      setSpeaking(false);
+    }
+  };
+
+  const progressPercentage = Math.round(((currentPage + 1) / lesson.pages.length) * 100);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Upper Navigation Row */}
+    <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">
+      {/* Header Info */}
       <div className="flex items-center justify-between">
         <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-white hover:bg-gray-50 border border-gray-100 rounded-xl text-gray-600 transition-all active:scale-95 shadow-sm"
+          onClick={() => {
+            stopReading();
+            onBack();
+          }}
+          className="text-xs font-bold text-gray-500 hover:text-violet-600 flex items-center gap-1 transition-colors"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <Translate text="Հետ դեպի ցանկ" />
+          <ChevronLeft className="w-4 h-4" />
+          <Translate text="Վերադառնալ" />
         </button>
 
         <div className="flex items-center gap-2">
-          {/* Bookmark */}
-          <button
-            onClick={() => toggleBookmark(lesson.id)}
-            className={`p-2.5 rounded-xl border transition-all active:scale-95 shadow-sm ${
-              isBookmarked
-                ? "bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100/70"
-                : "bg-white border-gray-100 text-gray-400 hover:bg-gray-50 hover:text-amber-500"
-            }`}
-          >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? "fill-amber-400" : ""}`} />
-          </button>
-
-          {/* Night Mode Toggle */}
-          <button
-            onClick={() => setNightMode(!nightMode)}
-            className={`p-2.5 rounded-xl border transition-all active:scale-95 shadow-sm ${
-              nightMode
-                ? "bg-slate-800 border-slate-700 text-yellow-400"
-                : "bg-white border-gray-100 text-slate-500 hover:bg-gray-50"
-            }`}
-          >
-            {nightMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Book/Slide Display Shell */}
-      <div
-        id="lesson-display-card"
-        className={`relative rounded-3xl border transition-all duration-300 shadow-md flex flex-col overflow-hidden min-h-[480px] ${
-          nightMode
-            ? "bg-slate-900 border-slate-800 text-slate-100"
-            : "bg-white border-gray-100 text-gray-800"
-        }`}
-      >
-        {/* Floating progress line */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100/30">
-          <div
-            className="bg-violet-600 h-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-
-        {/* Card Header */}
-        <div className={`p-5 md:p-6 border-b flex items-center justify-between ${
-          nightMode ? "border-slate-800 bg-slate-900/50" : "border-gray-50 bg-gray-50/20"
-        }`}>
-          <div className="flex items-center gap-2">
-            <span className="p-2 bg-violet-100 text-violet-700 rounded-lg text-sm">
-              <BookOpen className="w-4 h-4" />
-            </span>
-            <div>
-              <span className={`text-[10px] uppercase font-bold tracking-wider ${
-                nightMode ? "text-violet-400" : "text-violet-500"
-              }`}>
-                <Translate text={subject.name} />
-              </span>
-              <h3 className="font-bold text-sm md:text-base leading-none mt-0.5">
-                <Translate text={lesson.title} />
-              </h3>
-            </div>
-          </div>
-          <span className={`text-xs font-bold font-mono px-2.5 py-1 rounded-full ${
-            nightMode ? "bg-slate-800 text-slate-300" : "bg-gray-100 text-gray-600"
-          }`}>
-            {currentPage + 1} / {totalPages}
+          <BookOpen className="w-4 h-4 text-violet-500" />
+          <span className="text-xs font-bold text-gray-400">
+            {currentPage + 1} / {lesson.pages.length} <Translate text="Էջ" />
           </span>
         </div>
+      </div>
 
-        {/* Content Body */}
-        <div className="p-6 md:p-8 flex-1 flex flex-col md:grid md:grid-cols-2 gap-8 items-center justify-center">
-          {/* Text Content */}
-          <div className="space-y-4 w-full order-2 md:order-1">
-            <div className={`text-sm md:text-base leading-relaxed ${
-              nightMode ? "text-slate-300" : "text-gray-600"
-            }`}>
-              <Translate text={lesson.pages[currentPage]} />
-            </div>
+      {/* Lesson Slide Content Card */}
+      <div className="bg-white rounded-3xl border border-gray-150/80 shadow-md overflow-hidden min-h-[340px] flex flex-col justify-between p-6 md:p-8 relative">
+        {/* Dynamic visual page indicator / background corner */}
+        <div className="absolute right-0 top-0 bg-violet-50/50 text-violet-600 px-4 py-2 font-mono text-[10px] font-bold rounded-bl-2xl uppercase border-l border-b border-violet-100/30">
+          PAGE {currentPage + 1}
+        </div>
+
+        {/* Content body */}
+        <div className="space-y-6 flex-1 flex flex-col justify-center">
+          <div className="space-y-3">
+            <h3 className="font-extrabold text-gray-800 text-lg md:text-xl">
+              <Translate text={lesson.title} />
+            </h3>
+            <div className="w-12 h-1 bg-violet-500 rounded-full" />
           </div>
 
-          {/* Contextual Seeded Illustration Illustration container */}
-          <div className="w-full h-44 md:h-64 relative rounded-2xl overflow-hidden bg-violet-50/20 shadow-inner order-1 md:order-2">
-            {/* Seeded placeholder graphic using Picsum */}
-            <img
-              src={`https://picsum.photos/seed/${imageKeyword}_${currentPage}/600/400`}
-              alt={lesson.title}
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
-              onError={(e) => {
-                // Fallback to a stylish abstract background if image fails to load
-                (e.target as HTMLElement).style.display = "none";
-              }}
-            />
-            {/* Fallback SVG Illustration overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-indigo-500/20 flex items-center justify-center pointer-events-none">
-              <span className="text-5xl">{subject.icon}</span>
-            </div>
+          <div className="text-sm md:text-base text-gray-600 leading-relaxed font-sans max-w-2xl py-2">
+            <Translate text={lesson.pages[currentPage]} />
           </div>
         </div>
 
-        {/* Footer controls */}
-        <div className={`p-5 md:p-6 border-t flex items-center justify-between ${
-          nightMode ? "border-slate-800 bg-slate-900/50" : "border-gray-50 bg-gray-50/20"
-        }`}>
+        {/* Slide controls bottom */}
+        <div className="flex items-center justify-between pt-6 border-t border-gray-50">
+          {/* TTS Assist Button */}
           <button
-            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-            disabled={currentPage === 0}
-            className={`flex items-center gap-1 text-xs md:text-sm font-bold py-2 px-3.5 rounded-xl border transition-all ${
-              currentPage === 0
-                ? "opacity-40 cursor-not-allowed border-gray-100 text-gray-400"
-                : nightMode
-                ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-white"
-                : "bg-white border-gray-200 hover:bg-gray-50 text-gray-700"
+            onClick={startReading}
+            className={`p-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-[0.98] ${
+              speaking 
+                ? "bg-rose-50 border-rose-100 text-rose-600" 
+                : "bg-violet-50 border-violet-100 text-violet-600 hover:bg-violet-100/60"
             }`}
           >
-            <ArrowLeft className="w-4 h-4" />
-            <Translate text="Նախորդ" />
+            {speaking ? (
+              <>
+                <VolumeX className="w-4 h-4" />
+                <Translate text="Կանգնեցնել" />
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-4 h-4" />
+                <Translate text="Կարդալ Ձայնով" />
+              </>
+            )}
           </button>
 
-          {isLastPage ? (
+          {/* Navigation Arrows */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={onStartExam}
-              className="flex items-center gap-1.5 text-xs md:text-sm font-bold py-2.5 px-5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl shadow-md shadow-violet-100/30 transition-all active:scale-95 animate-pulse"
+              onClick={handlePrevPage}
+              disabled={currentPage === 0}
+              className="p-2.5 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl border border-gray-200 text-gray-500 transition-colors"
             >
-              <Translate text="Անցնել Քննությանը" />
-              <ArrowRight className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-          ) : (
             <button
-              onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-              className="flex items-center gap-1 text-xs md:text-sm font-bold py-2.5 px-5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-md shadow-violet-100/20 transition-all active:scale-95"
+              onClick={handleNextPage}
+              disabled={currentPage === lesson.pages.length - 1}
+              className="p-2.5 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl border border-gray-200 text-gray-500 transition-colors"
             >
-              <Translate text="Հաջորդ" />
-              <ArrowRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
-          )}
+          </div>
         </div>
       </div>
+
+      {/* Slide ProgressBar */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-[11px] font-medium text-gray-400">
+          <span><Translate text="Դասի Առաջընթաց" /></span>
+          <span className="font-bold">{progressPercentage}%</span>
+        </div>
+        <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+          <div
+            className="bg-violet-500 h-full rounded-full transition-all duration-300"
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
+      </div>
+
+      {/* CTA Box when slide complete */}
+      {currentPage === lesson.pages.length - 1 && (
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-3xl text-white shadow-lg space-y-4 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-white/20 rounded-xl text-yellow-300">
+              <Award className="w-5 h-5 fill-yellow-300" />
+            </div>
+            <div>
+              <h4 className="font-bold text-base md:text-lg">
+                <Translate text="Պատրա՞ստ եք քննությանը:" />
+              </h4>
+              <p className="text-xs text-white/80 leading-relaxed">
+                <Translate text="Ավարտեցիք դասը: Հանձնեք քննությունը ճիշտ պատասխանելով հարցերին՝ միավորներ և նոր նվաճումներ ստանալու համար:" />
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              stopReading();
+              onStartExam();
+            }}
+            className="w-full py-3 bg-white hover:bg-emerald-50 text-emerald-800 font-extrabold text-xs md:text-sm rounded-2xl flex items-center justify-center gap-1.5 shadow-md active:scale-[0.98] transition-all"
+          >
+            <Translate text="Սկսել Քննությունը" />
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
