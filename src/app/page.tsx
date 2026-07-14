@@ -1,6 +1,5 @@
-export const runtime = 'edge';
 "use client";
-
+export const runtime = 'edge';
 import { useState, useEffect, useMemo } from "react";
 import { useProgressStore } from "@/lib/store/progress";
 import { useTranslation, Translate } from "@/hooks/use-translation";
