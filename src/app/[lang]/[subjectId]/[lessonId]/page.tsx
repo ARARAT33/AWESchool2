@@ -1,6 +1,5 @@
-export const runtime = 'edge';
 "use client";
-
+export const runtime = 'edge';
 import { use, useEffect, useState } from "react";
 import { getSubject, getLesson, Subject, Lesson } from "@/lib/data/subjects";
 import { useI18nStore } from "@/lib/i18n";
